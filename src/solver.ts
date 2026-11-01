@@ -1,10 +1,9 @@
 import { applyMove, enumerateMoves, isSolved, serializeState } from './puzzle'
 import type { Move, PuzzleState, Solution } from './types'
 
-interface VisitedEntry {
+interface ParentEntry {
   readonly previousKey: string | null
   readonly move: Move | null
-  readonly state: PuzzleState
 }
 
 interface QueueEntry {
@@ -18,34 +17,33 @@ export function solve(initial: PuzzleState): Solution | null {
   const startKey = serializeState(initial)
   let queue: QueueEntry[] = [{ key: startKey, state: initial }]
   let queueHead = 0
-  const visited = new Map<string, VisitedEntry>([
-    [startKey, { previousKey: null, move: null, state: initial }],
+  const parents = new Map<string, ParentEntry>([
+    [startKey, { previousKey: null, move: null }],
   ])
 
   while (queueHead < queue.length) {
-    const { state: current, key: currentKey } = queue[queueHead]
+    const currentEntry = queue[queueHead]
     queueHead += 1
 
+    const current = currentEntry.state
     if (isSolved(current)) {
-      return reconstructSolution(visited, currentKey)
+      return reconstructSolution(initial, startKey, parents, currentEntry.key)
     }
 
     for (const move of enumerateMoves(current)) {
       const nextState = applyMove(current, move)
       const nextKey = serializeState(nextState)
-      if (visited.has(nextKey)) {
+      if (parents.has(nextKey)) {
         continue
       }
-      visited.set(nextKey, {
-        previousKey: currentKey,
+
+      parents.set(nextKey, {
+        previousKey: currentEntry.key,
         move,
-        state: nextState,
       })
       queue.push({ key: nextKey, state: nextState })
     }
 
-    // Array#shift reindexes every remaining state. Periodic compaction keeps
-    // dequeue O(1) while releasing references to states already explored.
     if (queueHead >= QUEUE_COMPACTION_THRESHOLD) {
       queue = queue.slice(queueHead)
       queueHead = 0
@@ -56,28 +54,31 @@ export function solve(initial: PuzzleState): Solution | null {
 }
 
 function reconstructSolution(
-  visited: Map<string, VisitedEntry>,
+  initial: PuzzleState,
+  startKey: string,
+  parents: Map<string, ParentEntry>,
   goalKey: string
 ): Solution {
-  const states: PuzzleState[] = []
   const moves: Move[] = []
 
   let currentKey: string | null = goalKey
-
-  while (currentKey) {
-    const entry = visited.get(currentKey)
-    if (!entry) {
-      throw new Error('Inconsistent visited map during reconstruction')
+  while (currentKey && currentKey !== startKey) {
+    const entry = parents.get(currentKey)
+    if (!entry || !entry.move) {
+      throw new Error('Inconsistent previous map during reconstruction')
     }
-    states.push(entry.state)
-    if (entry.move) {
-      moves.push(entry.move)
-    }
+    moves.push(entry.move)
     currentKey = entry.previousKey
   }
 
-  states.reverse()
   moves.reverse()
+
+  const states: PuzzleState[] = [initial]
+  let currentState = initial
+  for (const move of moves) {
+    currentState = applyMove(currentState, move)
+    states.push(currentState)
+  }
 
   return { states, moves }
 }
