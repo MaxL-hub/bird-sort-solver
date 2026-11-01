@@ -7,16 +7,24 @@ interface VisitedEntry {
   readonly state: PuzzleState
 }
 
+interface QueueEntry {
+  readonly key: string
+  readonly state: PuzzleState
+}
+
+const QUEUE_COMPACTION_THRESHOLD = 4_096
+
 export function solve(initial: PuzzleState): Solution | null {
   const startKey = serializeState(initial)
-  const queue: PuzzleState[] = [initial]
+  let queue: QueueEntry[] = [{ key: startKey, state: initial }]
+  let queueHead = 0
   const visited = new Map<string, VisitedEntry>([
     [startKey, { previousKey: null, move: null, state: initial }],
   ])
 
-  while (queue.length > 0) {
-    const current = queue.shift()!
-    const currentKey = serializeState(current)
+  while (queueHead < queue.length) {
+    const { state: current, key: currentKey } = queue[queueHead]
+    queueHead += 1
 
     if (isSolved(current)) {
       return reconstructSolution(visited, currentKey)
@@ -33,7 +41,14 @@ export function solve(initial: PuzzleState): Solution | null {
         move,
         state: nextState,
       })
-      queue.push(nextState)
+      queue.push({ key: nextKey, state: nextState })
+    }
+
+    // Array#shift reindexes every remaining state. Periodic compaction keeps
+    // dequeue O(1) while releasing references to states already explored.
+    if (queueHead >= QUEUE_COMPACTION_THRESHOLD) {
+      queue = queue.slice(queueHead)
+      queueHead = 0
     }
   }
 

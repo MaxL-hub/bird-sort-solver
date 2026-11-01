@@ -124,9 +124,29 @@ export function enumerateMoves(state: PuzzleState): Move[] {
         targetSide: Side,
         targetBranches: ReadonlyArray<Branch>
       ) => {
+        let usedEmptyTarget = false
         targetBranches.forEach((targetBranch, targetIndex) => {
           if (side === targetSide && branchIndex === targetIndex) {
             return
+          }
+          const sourceIsUniform = branch.birds.every(
+            (candidate) => candidate === bird
+          )
+
+          // Empty branches on one side are interchangeable. Exploring only
+          // the first removes duplicate subtrees without changing reachability.
+          if (targetBranch.birds.length === 0) {
+            if (usedEmptyTarget) {
+              return
+            }
+            usedEmptyTarget = true
+
+            // Moving a partial, single-colour branch to an empty branch only
+            // renames the useful empty slot; it cannot reveal a new bird or
+            // create a completed branch.
+            if (sourceIsUniform && branch.birds.length < branch.capacity) {
+              return
+            }
           }
           if (canReceive(targetBranch, bird)) {
             moves.push({

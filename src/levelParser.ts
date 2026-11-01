@@ -64,7 +64,7 @@ function parseBranchBlock(
 
     const [rawId, rawBirds] = line.split(':')
 
-    if (!rawBirds) {
+    if (rawBirds === undefined) {
       throw new Error(`Branch line "${line}" is missing a ':' to separate id from birds.`)
     }
 
